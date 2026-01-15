@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     libldap2-dev \
     libjpeg-dev \
     libffi-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia e instala dependências Python
