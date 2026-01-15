@@ -2,6 +2,7 @@ version: '3.8'
 services:
   web:
     image: odoo:18.0
+    build: .
     depends_on:
       - db
     ports:
@@ -10,6 +11,7 @@ services:
       - odoo-web-data:/var/lib/odoo
       - ./config:/etc/odoo
       - ./addons:/mnt/extra-addons
+      - ./oca_addons:/mnt/oca-addons
     environment:
       - HOST=db
       - USER=odoo
