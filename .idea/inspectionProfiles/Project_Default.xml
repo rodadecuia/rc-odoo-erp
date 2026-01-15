@@ -1,0 +1,29 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="psycopg2-binary" />
+          <option value="django-filter" />
+          <option value="djoser" />
+          <option value="django-cors-headers" />
+          <option value="gunicorn" />
+          <option value="requests" />
+          <option value="beautifulsoup4" />
+          <option value="django-elasticsearch-dsl" />
+          <option value="elasticsearch-dsl" />
+          <option value="elasticsearch" />
+          <option value="redis" />
+          <option value="django-storages" />
+          <option value="boto3" />
+          <option value="drf-yasg" />
+          <option value="setuptools" />
+          <option value="openpyxl" />
+          <option value="whitenoise" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>
