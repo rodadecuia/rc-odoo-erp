@@ -3,6 +3,7 @@ FROM odoo:18.0
 USER root
 
 # Instala dependências do sistema necessárias para o OCA Brasil
+# Removido libpq-dev devido a conflitos de versão com o repositório do Postgres na imagem base
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
@@ -13,7 +14,6 @@ RUN apt-get update && apt-get install -y \
     libsasl2-dev \
     libldap2-dev \
     libjpeg-dev \
-    libpq-dev \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
