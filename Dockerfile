@@ -3,7 +3,7 @@ FROM odoo:18.0
 USER root
 
 # Instala dependências do sistema necessárias para o OCA Brasil
-# Removido libpq-dev devido a conflitos de versão com o repositório do Postgres na imagem base
+# Nota: libpq-dev foi removido para evitar conflitos de versão com o repositório do Postgres já configurado na imagem oficial
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
@@ -19,7 +19,8 @@ RUN apt-get update && apt-get install -y \
 
 # Copia e instala dependências Python
 COPY ./requirements.txt /etc/odoo/
-RUN pip3 install --no-cache-dir -r /etc/odoo/requirements.txt
+# Adicionado --break-system-packages para permitir instalação no ambiente Python do sistema (Debian 12+)
+RUN pip3 install --no-cache-dir --break-system-packages -r /etc/odoo/requirements.txt
 
 # Copia o arquivo de configuração personalizado
 COPY ./config /etc/odoo
