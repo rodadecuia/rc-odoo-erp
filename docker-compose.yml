@@ -1,17 +1,19 @@
 version: '3.8'
 services:
   web:
-    image: odoo:${ODOO_VERSION:-18.0}
-    build: .
+    image: ghcr.io/rodadecuia/rc-odoo-erp:latest
+    build: ./odoo_server
+    container_name: odoo
     depends_on:
       - db
-    ports:
-      - "${ODOO_PORT:-8069}:8069"
+    expose:
+      - "8069"
+      - "8072"
     volumes:
       - odoo-web-data:/var/lib/odoo
-      - ./config:/etc/odoo
-      - ./addons:/mnt/extra-addons
-      - ./oca_addons:/mnt/oca-addons
+      - ./odoo_server/config:/etc/odoo
+      - ./odoo_server/addons:/mnt/extra-addons
+      - ./odoo_server/oca_addons:/mnt/oca-addons
     environment:
       - HOST=db
       - USER=${POSTGRES_USER:-odoo}
@@ -20,6 +22,7 @@ services:
 
   db:
     image: postgres:${POSTGRES_VERSION:-15}
+    container_name: db
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-odoo}
@@ -27,6 +30,30 @@ services:
     volumes:
       - odoo-db-data:/var/lib/postgresql/data
     restart: always
+
+  nginx:
+    image: ghcr.io/rodadecuia/rc-odoo-nginx:latest
+    build: ./nginx
+    container_name: nginx
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    restart: always
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
   odoo-web-data:

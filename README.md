@@ -19,11 +19,13 @@ Este projeto inclui uma configuração do Docker Compose para rodar o Odoo 18 co
 
    Se você estiver no Linux/Mac ou usando Git Bash no Windows:
    ```bash
+   cd odoo_server
    chmod +x setup_oca.sh
    ./setup_oca.sh
+   cd ..
    ```
    
-   Isso irá baixar os repositórios necessários (l10n-brazil, account-fiscal-rule, etc.) como submódulos git na pasta `oca_addons`.
+   Isso irá baixar os repositórios necessários (l10n-brazil, account-fiscal-rule, etc.) como submódulos git na pasta `odoo_server/oca_addons`.
 
 4. Execute o seguinte comando para iniciar os containers:
 
@@ -42,10 +44,13 @@ docker-compose up -d --build
 ### Estrutura de Pastas
 
 - `docker-compose.yml`: Arquivo de definição dos serviços.
-- `config/`: Contém o arquivo de configuração `odoo.conf`.
-- `addons/`: Pasta mapeada para `/mnt/extra-addons` para adicionar módulos personalizados.
-- `oca_addons/`: Pasta mapeada para `/mnt/oca-addons` para módulos da OCA.
-- `requirements.txt`: Lista de dependências Python adicionais.
+- `odoo_server/`: Contém todos os arquivos necessários para construir a imagem do Odoo.
+    - `config/`: Contém o arquivo de configuração `odoo.conf`.
+    - `addons/`: Pasta mapeada para `/mnt/extra-addons` para adicionar módulos personalizados.
+    - `oca_addons/`: Pasta mapeada para `/mnt/oca-addons` para módulos da OCA.
+    - `requirements.txt`: Lista de dependências Python adicionais.
+- `nginx/`: Configurações do proxy reverso.
+- `scripts/`: Scripts utilitários de instalação.
 
 ### Módulos OCA Incluídos
 

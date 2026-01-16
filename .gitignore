@@ -4,5 +4,5 @@ __pycache__/
 *.py[cod]
 .DS_Store
 .env
-oca_addons/
-!oca_addons/.gitkeep
+odoo_server/oca_addons/
+!odoo_server/oca_addons/.gitkeep
