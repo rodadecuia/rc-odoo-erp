@@ -18,6 +18,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup OCA Addons
+        run: |
+          chmod +x setup_oca.sh
+          ./setup_oca.sh --ci
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3

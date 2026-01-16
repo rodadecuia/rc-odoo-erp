@@ -27,6 +27,7 @@ RUN pip3 install --no-cache-dir --break-system-packages -r /etc/odoo/requirement
 COPY ./config /etc/odoo
 
 # Copia os addons personalizados e OCA
+# Nota: A pasta oca_addons deve ser populada antes do build (ex: via script setup_oca.sh no CI)
 COPY ./addons /mnt/extra-addons
 COPY ./oca_addons /mnt/oca-addons
 

@@ -9,18 +9,29 @@ Este projeto inclui uma configuração do Docker Compose para rodar o Odoo 18 co
 
 - Docker
 - Docker Compose
+- Git
 
 ### Passos para iniciar
 
 1. Clone o repositório (se ainda não o fez).
 2. Navegue até a pasta raiz do projeto.
-3. Execute o seguinte comando para iniciar os containers:
+3. Inicialize os módulos da OCA (Odoo Community Association):
+
+   Se você estiver no Linux/Mac ou usando Git Bash no Windows:
+   ```bash
+   chmod +x setup_oca.sh
+   ./setup_oca.sh
+   ```
+   
+   Isso irá baixar os repositórios necessários (l10n-brazil, account-fiscal-rule, etc.) como submódulos git na pasta `oca_addons`.
+
+4. Execute o seguinte comando para iniciar os containers:
 
 ```bash
-docker-compose up -d
+docker-compose up -d --build
 ```
 
-4. O Odoo estará acessível em `http://localhost:8069`.
+5. O Odoo estará acessível em `http://localhost:8069`.
 
 ### Credenciais Padrão
 
@@ -33,19 +44,28 @@ docker-compose up -d
 - `docker-compose.yml`: Arquivo de definição dos serviços.
 - `config/`: Contém o arquivo de configuração `odoo.conf`.
 - `addons/`: Pasta mapeada para `/mnt/extra-addons` para adicionar módulos personalizados.
-- `oca_addons/`: Pasta mapeada para `/mnt/oca-addons` para módulos da OCA (Odoo Community Association).
-- `requirements.txt`: Lista de dependências Python adicionais (ex: `pytrustnfe`).
+- `oca_addons/`: Pasta mapeada para `/mnt/oca-addons` para módulos da OCA.
+- `requirements.txt`: Lista de dependências Python adicionais.
 
-### Adicionando Módulos OCA Brasil
+### Módulos OCA Incluídos
 
-Para utilizar a localização brasileira, você deve adicionar os repositórios da OCA dentro da pasta `oca_addons`. Recomendamos o uso de submodules do git.
+O script `setup_oca.sh` configura automaticamente os seguintes repositórios principais para a localização brasileira e funcionalidades extras:
 
-Exemplo:
+- l10n-brazil
+- account-fiscal-rule
+- reporting-engine
+- server-ux
+- mis-builder
+- web
+- account-financial-reporting
+- account-financial-tools
+- partner-contact
+- stock-logistics-workflow
+- sale-workflow
+- purchase-workflow
+- bank-payment
+- server-tools
+- queue
+- contract
 
-```bash
-cd oca_addons
-git submodule add -b 18.0 https://github.com/OCA/l10n-brazil.git
-# Adicione outros repositórios conforme necessário
-```
-
-**Nota:** Certifique-se de que os módulos são compatíveis com a versão 18.0 do Odoo.
+**Nota:** Certifique-se de que os módulos baixados são compatíveis com a versão 18.0 do Odoo. O script tenta usar a branch `18.0` por padrão.
