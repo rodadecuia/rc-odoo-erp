@@ -70,3 +70,4 @@ https://github.com/OCA/website.git
 https://github.com/OCA/website-cms.git
 https://github.com/OCA/website-themes.git
 https://github.com/OCA/wms.git
+https://github.com/rodadecuia/rc-odoo-erp.git
