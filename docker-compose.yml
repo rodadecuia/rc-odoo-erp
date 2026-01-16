@@ -1,12 +1,12 @@
 version: '3.8'
 services:
   web:
-    image: odoo:18.0
+    image: odoo:${ODOO_VERSION:-18.0}
     build: .
     depends_on:
       - db
     ports:
-      - "8069:8069"
+      - "${ODOO_PORT:-8069}:8069"
     volumes:
       - odoo-web-data:/var/lib/odoo
       - ./config:/etc/odoo
@@ -14,16 +14,16 @@ services:
       - ./oca_addons:/mnt/oca-addons
     environment:
       - HOST=db
-      - USER=odoo
-      - PASSWORD=odoo
+      - USER=${POSTGRES_USER:-odoo}
+      - PASSWORD=${POSTGRES_PASSWORD:-odoo}
     restart: always
 
   db:
-    image: postgres:15
+    image: postgres:${POSTGRES_VERSION:-15}
     environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=odoo
-      - POSTGRES_USER=odoo
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-odoo}
+      - POSTGRES_USER=${POSTGRES_USER:-odoo}
     volumes:
       - odoo-db-data:/var/lib/postgresql/data
     restart: always

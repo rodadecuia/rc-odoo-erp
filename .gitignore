@@ -1,0 +1,8 @@
+.idea/
+*.iml
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+oca_addons/
+!oca_addons/.gitkeep
