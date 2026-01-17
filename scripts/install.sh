@@ -60,6 +60,92 @@ install_docker() {
     fi
 }
 
+# Função inteligente para configurar o Nginx baseado no estado atual dos certificados
+finalize_nginx_config() {
+    echo ">> Verificando configuração final do Nginx..."
+
+    # Tenta detectar domínio existente nos certificados
+    DETECTED_DOMAIN=""
+    if [ -d "certbot/conf/live" ]; then
+        # Pega o primeiro diretório que não seja README
+        DETECTED_DOMAIN=$(ls -F certbot/conf/live/ | grep / | head -n 1 | tr -d /)
+    fi
+
+    if [ -n "$DETECTED_DOMAIN" ] && [ -f "certbot/conf/live/$DETECTED_DOMAIN/fullchain.pem" ]; then
+        echo ">> Certificado SSL detectado para $DETECTED_DOMAIN. Aplicando template HTTPS..."
+
+        # Restaura o template original do git se existir, para garantir limpeza
+        if [ -f "nginx/nginx.conf" ]; then
+             # Verifica se é o template (contém __DOMAIN__) ou um arquivo já processado
+             if ! grep -q "__DOMAIN__" nginx/nginx.conf; then
+                 # Se não tiver __DOMAIN__, assume que é um arquivo velho e tenta pegar do git se possível
+                 # Mas como estamos num sparse checkout, talvez não tenhamos o original limpo fácil.
+                 # O update_system faz git pull, então o arquivo deve vir limpo se não tivermos alterado localmente.
+                 # Como o update_system faz stash pop, ele restaura o modificado.
+                 # Então, vamos forçar um checkout do arquivo original do git para garantir.
+                 git checkout nginx/nginx.conf 2>/dev/null || true
+             fi
+        fi
+
+        # Substitui o placeholder pelo domínio real
+        sed -i "s/__DOMAIN__/$DETECTED_DOMAIN/g" nginx/nginx.conf
+
+    else
+        echo ">> Nenhum certificado SSL válido encontrado."
+
+        # Verifica se o Nginx está preso no modo de validação ou se não existe config
+        if grep -q "Validando SSL" nginx/nginx.conf 2>/dev/null || [ ! -f "nginx/nginx.conf" ]; then
+            echo ">> Nginx está em modo de validação ou sem config. Revertendo para HTTP padrão..."
+
+            # Gera config HTTP básica de fallback
+            cat > nginx/nginx.conf <<EOF
+upstream odoo { server web:8069; }
+upstream odoochat { server web:8072; }
+
+map \$http_upgrade \$connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    client_max_body_size 100M;
+    proxy_read_timeout 720s;
+    proxy_connect_timeout 720s;
+    proxy_send_timeout 720s;
+
+    proxy_set_header X-Forwarded-Host \$http_host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Real-IP \$remote_addr;
+
+    location /websocket {
+        proxy_pass http://odoochat;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+    }
+
+    location / {
+        proxy_pass http://odoo;
+        proxy_redirect off;
+    }
+
+    location ~* /web/static/ {
+        proxy_cache_valid 200 90m;
+        proxy_buffering on;
+        expires 864000;
+        proxy_pass http://odoo;
+    }
+}
+EOF
+        else
+            echo ">> Mantendo configuração HTTP existente."
+        fi
+    fi
+}
+
 update_system() {
     echo ""
     echo "================================================================"
@@ -70,17 +156,17 @@ update_system() {
     cd "$TARGET_DIR"
 
     echo ">> Salvando alterações locais (stash)..."
-    # Salva configs locais (ex: nginx.conf com SSL) para não perder no pull
     git stash
 
     echo ">> Atualizando código fonte (git pull)..."
     git pull origin main || git pull origin master
 
+    # NOTA: Não fazemos stash pop do nginx.conf aqui se quisermos usar o novo template do git.
+    # Mas precisamos restaurar o .env e outras configs locais.
+    # Vamos fazer stash pop, e depois resetar o nginx.conf para o do git se formos reprocessá-lo.
     echo ">> Restaurando alterações locais..."
-    # Tenta restaurar. Se falhar (conflito), mantém o que veio do git e avisa.
-    git stash pop || echo "AVISO: Conflito ao restaurar stash ou nada para restaurar. Verifique nginx/nginx.conf."
+    git stash pop || echo "AVISO: Conflito ao restaurar stash ou nada para restaurar."
 
-    # Garante que o ajuste de produção no docker-compose.yml seja aplicado novamente
     if [ -f "docker-compose.yml" ]; then
         echo ">> Reaplicando ajustes de produção..."
         sed -i '/oca_addons/d' docker-compose.yml
@@ -88,6 +174,9 @@ update_system() {
 
     echo ">> Baixando novas imagens Docker..."
     docker compose pull
+
+    # Garante a config correta do Nginx antes de subir
+    finalize_nginx_config
 
     echo ">> Reiniciando serviços..."
     docker compose up -d --remove-orphans
@@ -189,68 +278,26 @@ EOF
         docker compose pull
 
         echo ">> Iniciando Nginx (modo isolado)..."
-        # --no-deps garante que DB e Odoo NÃO subam agora
         docker compose up -d --no-deps nginx
         sleep 5
 
         echo ">> Solicitando certificado..."
-        docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot --email "$EMAIL" -d "$DOMAIN" --agree-tos --force-renewal
 
-        if [ -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
-            echo ">> Certificado OK! Configurando HTTPS..."
+        # Usa docker run para evitar problemas de entrypoint
+        docker run --rm \
+            -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
+            -v "$(pwd)/certbot/www:/var/www/certbot" \
+            certbot/certbot \
+            certonly --webroot --webroot-path /var/www/certbot \
+            --email "$EMAIL" -d "$DOMAIN" --agree-tos --force-renewal
 
-            cat > nginx/nginx.conf <<EOF
-upstream odoo { server web:8069; }
-upstream odoochat { server web:8072; }
-
-server {
-    listen 80;
-    server_name $DOMAIN;
-    location /.well-known/acme-challenge/ { root /var/www/certbot; }
-    location / { return 301 https://\$host\$request_uri; }
-}
-
-server {
-    listen 443 ssl;
-    server_name $DOMAIN;
-
-    ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    proxy_read_timeout 720s;
-    proxy_connect_timeout 720s;
-    proxy_send_timeout 720s;
-
-    location / {
-        proxy_pass http://odoo;
-        proxy_redirect off;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    location /longpolling { proxy_pass http://odoochat; }
-}
-EOF
-            docker compose down
-        else
-            echo "ERRO: Falha no SSL. Configurando HTTP básico."
-            cat > nginx/nginx.conf <<EOF
-upstream odoo { server web:8069; }
-upstream odoochat { server web:8072; }
-server {
-    listen 80;
-    server_name $DOMAIN;
-    location / { proxy_pass http://odoo; }
-    location /longpolling { proxy_pass http://odoochat; }
-}
-EOF
-        fi
+        # Para o nginx temporário
+        docker compose stop nginx
     fi
 fi
+
+# Chama a função inteligente para gerar a config final (HTTPS ou HTTP)
+finalize_nginx_config
 
 echo ""
 echo ">> Iniciando serviços..."
