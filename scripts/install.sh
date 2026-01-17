@@ -2,11 +2,17 @@
 
 # Script de Instalação e Atualização Automática do RC ODOO ERP
 # Suporta: Debian/Ubuntu e RHEL/Rocky/CentOS
+# Uso: ./install.sh [DOMINIO] [EMAIL]
+# Exemplo: ./install.sh odoo.minhaempresa.com admin@minhaempresa.com
 
 set -e
 
 TARGET_DIR="/home/rc-odoo-erp"
 REPO_URL="https://github.com/rodadecuia/rc-odoo-erp.git"
+
+# Argumentos Opcionais para Instalação Não-Interativa
+ARG_DOMAIN="$1"
+ARG_EMAIL="$2"
 
 # Verifica se é root
 if [ "$EUID" -ne 0 ]; then
@@ -74,22 +80,18 @@ finalize_nginx_config() {
     if [ -n "$DETECTED_DOMAIN" ] && [ -f "certbot/conf/live/$DETECTED_DOMAIN/fullchain.pem" ]; then
         echo ">> Certificado SSL detectado para $DETECTED_DOMAIN. Aplicando template HTTPS..."
 
-        # Garante que estamos usando o template limpo do repositório
         if [ -f "nginx/nginx.conf" ]; then
              git checkout nginx/nginx.conf 2>/dev/null || true
         fi
 
-        # Substitui o placeholder pelo domínio real
         sed -i "s/__DOMAIN__/$DETECTED_DOMAIN/g" nginx/nginx.conf
 
     else
         echo ">> Nenhum certificado SSL válido encontrado."
 
-        # Verifica se o Nginx está preso no modo de validação ou se não existe config
         if grep -q "Validando SSL" nginx/nginx.conf 2>/dev/null || [ ! -f "nginx/nginx.conf" ]; then
             echo ">> Nginx está em modo de validação ou sem config. Revertendo para HTTP padrão..."
 
-            # Gera config HTTP básica de fallback
             cat > nginx/nginx.conf <<EOF
 upstream odoo { server web:8069; }
 upstream odoochat { server web:8072; }
@@ -141,55 +143,40 @@ EOF
 update_system() {
     echo ""
     echo "================================================================"
-    echo " ATUALIZAÇÃO DO SISTEMA DETECTADA"
+    echo " ATUALIZAÇÃO AUTOMÁTICA INICIADA"
     echo "================================================================"
     echo ">> Diretório $TARGET_DIR encontrado."
 
     cd "$TARGET_DIR"
 
     # --- CORREÇÃO DE ESTADO GIT ---
-    echo ">> Verificando integridade do repositório git..."
-
-    # Remove arquivo de lock se existir (pode acontecer se o script anterior foi interrompido)
     rm -f .git/index.lock
-
-    # Se estiver em estado de merge (conflito), aborta o merge para limpar o estado
     if [ -f ".git/MERGE_HEAD" ]; then
-        echo ">> Estado de merge detectado. Abortando merge anterior..."
         git merge --abort 2>/dev/null || true
     fi
-
-    # Reseta o nginx.conf forçadamente antes de qualquer coisa, pois ele é o causador comum de conflitos
     git checkout -f nginx/nginx.conf 2>/dev/null || true
     git reset HEAD nginx/nginx.conf 2>/dev/null || true
     # ------------------------------
 
-    # 1. Backup de segurança de configs locais críticas
     echo ">> Fazendo backup de configurações locais..."
     if [ -f "nginx/nginx.conf" ]; then
         cp nginx/nginx.conf nginx/nginx.conf.bak_$(date +%s)
     fi
 
-    # 2. Reseta arquivos gerenciados pelo script para evitar conflitos de merge
     echo ">> Resetando arquivos de configuração gerenciados..."
     git checkout nginx/nginx.conf 2>/dev/null || true
 
-    # 3. Salva outras alterações do usuário (ex: .env)
     echo ">> Salvando alterações do usuário (stash)..."
     git stash
 
-    # 4. Atualiza o repositório
     echo ">> Atualizando código fonte (git pull)..."
     git pull origin main || git pull origin master
 
-    # 5. Restaura alterações do usuário
     echo ">> Restaurando alterações do usuário..."
     git stash pop || echo "AVISO: Nada para restaurar ou conflito detectado no stash pop."
 
-    # 6. Garante novamente que o template do nginx é o novo
     git checkout nginx/nginx.conf 2>/dev/null || true
 
-    # 7. Ajustes de produção
     if [ -f "docker-compose.yml" ]; then
         echo ">> Reaplicando ajustes de produção..."
         sed -i '/oca_addons/d' docker-compose.yml
@@ -198,7 +185,6 @@ update_system() {
     echo ">> Baixando novas imagens Docker..."
     docker compose pull
 
-    # 8. Regenera a configuração final baseada no novo template
     finalize_nginx_config
 
     echo ">> Reiniciando serviços..."
@@ -217,16 +203,9 @@ update_system() {
 
 install_docker
 
-# Verifica se é uma atualização
+# Verifica se é uma atualização (AUTOMÁTICA SE EXISTIR)
 if [ -d "$TARGET_DIR" ] && [ -d "$TARGET_DIR/.git" ]; then
-    read -p "O sistema já está instalado em $TARGET_DIR. Deseja atualizar? (s/n): " DO_UPDATE
-    if [[ "$DO_UPDATE" =~ ^[Ss]$ ]]; then
-        update_system
-    else
-        echo ">> Para realizar uma instalação limpa, remova o diretório $TARGET_DIR manualmente ou escolha um novo local."
-        echo ">> Exemplo: rm -rf $TARGET_DIR"
-        exit 0
-    fi
+    update_system
 fi
 
 # --- INSTALAÇÃO LIMPA ---
@@ -234,7 +213,7 @@ fi
 echo ">> Iniciando Instalação Limpa em $TARGET_DIR..."
 
 if [ -d "$TARGET_DIR" ]; then
-    echo ">> O diretório existe mas não parece um repositório git válido ou o usuário optou por não atualizar."
+    echo ">> O diretório existe mas não parece um repositório git válido."
     echo ">> Fazendo backup para ${TARGET_DIR}_backup_$(date +%s)..."
     mv "$TARGET_DIR" "${TARGET_DIR}_backup_$(date +%s)"
 fi
@@ -274,21 +253,32 @@ mkdir -p odoo_server/addons
 mkdir -p certbot/conf
 mkdir -p certbot/www
 
-# Configuração SSL Interativa
-echo ""
-echo "----------------------------------------------------------------"
-echo "Configuração de Domínio e SSL (Opcional)"
-echo "----------------------------------------------------------------"
-read -p "Deseja configurar um domínio e SSL agora? (s/n): " CONFIGURE_SSL
+# Configuração SSL (Interativa ou via Argumentos)
+CONFIGURE_SSL="n"
+DOMAIN=""
+EMAIL=""
 
-if [[ "$CONFIGURE_SSL" =~ ^[Ss]$ ]]; then
-    read -p "Digite o domínio principal (ex: odoo.minhaempresa.com): " DOMAIN
-    read -p "Digite o email para o Certbot: " EMAIL
+if [ -n "$ARG_DOMAIN" ] && [ -n "$ARG_EMAIL" ]; then
+    echo ">> Argumentos de domínio detectados: $ARG_DOMAIN"
+    CONFIGURE_SSL="s"
+    DOMAIN="$ARG_DOMAIN"
+    EMAIL="$ARG_EMAIL"
+else
+    echo ""
+    echo "----------------------------------------------------------------"
+    echo "Configuração de Domínio e SSL (Opcional)"
+    echo "----------------------------------------------------------------"
+    read -p "Deseja configurar um domínio e SSL agora? (s/n): " CONFIGURE_SSL
+    if [[ "$CONFIGURE_SSL" =~ ^[Ss]$ ]]; then
+        read -p "Digite o domínio principal (ex: odoo.minhaempresa.com): " DOMAIN
+        read -p "Digite o email para o Certbot: " EMAIL
+    fi
+fi
 
-    if [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
-        echo ">> Configurando Nginx para validação SSL..."
+if [[ "$CONFIGURE_SSL" =~ ^[Ss]$ ]] && [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
+    echo ">> Configurando Nginx para validação SSL..."
 
-        cat > nginx/nginx.conf <<EOF
+    cat > nginx/nginx.conf <<EOF
 server {
     listen 80;
     server_name $DOMAIN;
@@ -297,29 +287,25 @@ server {
 }
 EOF
 
-        echo ">> Baixando imagens..."
-        docker compose pull
+    echo ">> Baixando imagens..."
+    docker compose pull
 
-        echo ">> Iniciando Nginx (modo isolado)..."
-        docker compose up -d --no-deps nginx
-        sleep 5
+    echo ">> Iniciando Nginx (modo isolado)..."
+    docker compose up -d --no-deps nginx
+    sleep 5
 
-        echo ">> Solicitando certificado..."
+    echo ">> Solicitando certificado..."
 
-        # Usa docker run para evitar problemas de entrypoint
-        docker run --rm \
-            -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
-            -v "$(pwd)/certbot/www:/var/www/certbot" \
-            certbot/certbot \
-            certonly --webroot --webroot-path /var/www/certbot \
-            --email "$EMAIL" -d "$DOMAIN" --agree-tos --force-renewal
+    docker run --rm \
+        -v "$(pwd)/certbot/conf:/etc/letsencrypt" \
+        -v "$(pwd)/certbot/www:/var/www/certbot" \
+        certbot/certbot \
+        certonly --webroot --webroot-path /var/www/certbot \
+        --email "$EMAIL" -d "$DOMAIN" --agree-tos --force-renewal
 
-        # Para o nginx temporário
-        docker compose stop nginx
-    fi
+    docker compose stop nginx
 fi
 
-# Chama a função inteligente para gerar a config final (HTTPS ou HTTP)
 finalize_nginx_config
 
 echo ""
