@@ -254,5 +254,9 @@ fi
 echo ""
 echo ">> Iniciando serviços..."
 docker compose up -d
+
+echo ">> Limpando imagens antigas..."
+docker image prune -f
+
 echo ">> Instalação Concluída!"
 docker compose ps
