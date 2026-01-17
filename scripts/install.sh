@@ -188,8 +188,9 @@ EOF
         echo ">> Baixando imagens..."
         docker compose pull
 
-        echo ">> Iniciando Nginx..."
-        docker compose up -d nginx
+        echo ">> Iniciando Nginx (modo isolado)..."
+        # --no-deps garante que DB e Odoo NÃO subam agora
+        docker compose up -d --no-deps nginx
         sleep 5
 
         echo ">> Solicitando certificado..."
