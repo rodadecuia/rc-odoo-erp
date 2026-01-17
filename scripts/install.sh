@@ -75,7 +75,6 @@ finalize_nginx_config() {
         echo ">> Certificado SSL detectado para $DETECTED_DOMAIN. Aplicando template HTTPS..."
 
         # Garante que estamos usando o template limpo do repositório
-        # Isso remove qualquer configuração anterior ou conflito de merge
         if [ -f "nginx/nginx.conf" ]; then
              git checkout nginx/nginx.conf 2>/dev/null || true
         fi
@@ -148,6 +147,23 @@ update_system() {
 
     cd "$TARGET_DIR"
 
+    # --- CORREÇÃO DE ESTADO GIT ---
+    echo ">> Verificando integridade do repositório git..."
+
+    # Remove arquivo de lock se existir (pode acontecer se o script anterior foi interrompido)
+    rm -f .git/index.lock
+
+    # Se estiver em estado de merge (conflito), aborta o merge para limpar o estado
+    if [ -f ".git/MERGE_HEAD" ]; then
+        echo ">> Estado de merge detectado. Abortando merge anterior..."
+        git merge --abort 2>/dev/null || true
+    fi
+
+    # Reseta o nginx.conf forçadamente antes de qualquer coisa, pois ele é o causador comum de conflitos
+    git checkout -f nginx/nginx.conf 2>/dev/null || true
+    git reset HEAD nginx/nginx.conf 2>/dev/null || true
+    # ------------------------------
+
     # 1. Backup de segurança de configs locais críticas
     echo ">> Fazendo backup de configurações locais..."
     if [ -f "nginx/nginx.conf" ]; then
@@ -170,7 +186,7 @@ update_system() {
     echo ">> Restaurando alterações do usuário..."
     git stash pop || echo "AVISO: Nada para restaurar ou conflito detectado no stash pop."
 
-    # 6. Garante novamente que o template do nginx é o novo (caso o stash pop tenha trazido o velho)
+    # 6. Garante novamente que o template do nginx é o novo
     git checkout nginx/nginx.conf 2>/dev/null || true
 
     # 7. Ajustes de produção
