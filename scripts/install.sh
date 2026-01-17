@@ -77,22 +77,32 @@ finalize_nginx_config() {
         DETECTED_DOMAIN=$(ls -F certbot/conf/live/ | grep / | head -n 1 | tr -d /)
     fi
 
+    echo ">> Domínio detectado nos certificados: '$DETECTED_DOMAIN'"
+
     if [ -n "$DETECTED_DOMAIN" ] && [ -f "certbot/conf/live/$DETECTED_DOMAIN/fullchain.pem" ]; then
-        echo ">> Certificado SSL detectado para $DETECTED_DOMAIN. Aplicando template HTTPS..."
+        echo ">> Certificado SSL válido encontrado. Aplicando template HTTPS..."
 
         if [ -f "nginx/nginx.conf" ]; then
              git checkout nginx/nginx.conf 2>/dev/null || true
         fi
 
+        # Substitui o placeholder pelo domínio real
         sed -i "s/__DOMAIN__/$DETECTED_DOMAIN/g" nginx/nginx.conf
 
+        # Verificação de segurança: Se a substituição falhou, reverte para HTTP
+        if grep -q "__DOMAIN__" nginx/nginx.conf; then
+            echo "ERRO: Falha na substituição do domínio no nginx.conf. Revertendo para HTTP."
+            FORCE_HTTP=true
+        fi
     else
-        echo ">> Nenhum certificado SSL válido encontrado."
+        echo ">> Nenhum certificado SSL válido encontrado (ou arquivo fullchain.pem ausente)."
+        FORCE_HTTP=true
+    fi
 
-        if grep -q "Validando SSL" nginx/nginx.conf 2>/dev/null || [ ! -f "nginx/nginx.conf" ]; then
-            echo ">> Nginx está em modo de validação ou sem config. Revertendo para HTTP padrão..."
+    if [ "$FORCE_HTTP" = true ]; then
+        echo ">> Configurando Nginx em modo HTTP (Fallback)..."
 
-            cat > nginx/nginx.conf <<EOF
+        cat > nginx/nginx.conf <<EOF
 upstream odoo { server web:8069; }
 upstream odoochat { server web:8072; }
 
@@ -134,9 +144,6 @@ server {
     }
 }
 EOF
-        else
-            echo ">> Mantendo configuração HTTP existente."
-        fi
     fi
 }
 
