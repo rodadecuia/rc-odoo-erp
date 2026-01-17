@@ -74,17 +74,10 @@ finalize_nginx_config() {
     if [ -n "$DETECTED_DOMAIN" ] && [ -f "certbot/conf/live/$DETECTED_DOMAIN/fullchain.pem" ]; then
         echo ">> Certificado SSL detectado para $DETECTED_DOMAIN. Aplicando template HTTPS..."
 
-        # Restaura o template original do git se existir, para garantir limpeza
+        # Garante que estamos usando o template limpo do repositório
+        # Isso remove qualquer configuração anterior ou conflito de merge
         if [ -f "nginx/nginx.conf" ]; then
-             # Verifica se é o template (contém __DOMAIN__) ou um arquivo já processado
-             if ! grep -q "__DOMAIN__" nginx/nginx.conf; then
-                 # Se não tiver __DOMAIN__, assume que é um arquivo velho e tenta pegar do git se possível
-                 # Mas como estamos num sparse checkout, talvez não tenhamos o original limpo fácil.
-                 # O update_system faz git pull, então o arquivo deve vir limpo se não tivermos alterado localmente.
-                 # Como o update_system faz stash pop, ele restaura o modificado.
-                 # Então, vamos forçar um checkout do arquivo original do git para garantir.
-                 git checkout nginx/nginx.conf 2>/dev/null || true
-             fi
+             git checkout nginx/nginx.conf 2>/dev/null || true
         fi
 
         # Substitui o placeholder pelo domínio real
@@ -155,18 +148,32 @@ update_system() {
 
     cd "$TARGET_DIR"
 
-    echo ">> Salvando alterações locais (stash)..."
+    # 1. Backup de segurança de configs locais críticas
+    echo ">> Fazendo backup de configurações locais..."
+    if [ -f "nginx/nginx.conf" ]; then
+        cp nginx/nginx.conf nginx/nginx.conf.bak_$(date +%s)
+    fi
+
+    # 2. Reseta arquivos gerenciados pelo script para evitar conflitos de merge
+    echo ">> Resetando arquivos de configuração gerenciados..."
+    git checkout nginx/nginx.conf 2>/dev/null || true
+
+    # 3. Salva outras alterações do usuário (ex: .env)
+    echo ">> Salvando alterações do usuário (stash)..."
     git stash
 
+    # 4. Atualiza o repositório
     echo ">> Atualizando código fonte (git pull)..."
     git pull origin main || git pull origin master
 
-    # NOTA: Não fazemos stash pop do nginx.conf aqui se quisermos usar o novo template do git.
-    # Mas precisamos restaurar o .env e outras configs locais.
-    # Vamos fazer stash pop, e depois resetar o nginx.conf para o do git se formos reprocessá-lo.
-    echo ">> Restaurando alterações locais..."
-    git stash pop || echo "AVISO: Conflito ao restaurar stash ou nada para restaurar."
+    # 5. Restaura alterações do usuário
+    echo ">> Restaurando alterações do usuário..."
+    git stash pop || echo "AVISO: Nada para restaurar ou conflito detectado no stash pop."
 
+    # 6. Garante novamente que o template do nginx é o novo (caso o stash pop tenha trazido o velho)
+    git checkout nginx/nginx.conf 2>/dev/null || true
+
+    # 7. Ajustes de produção
     if [ -f "docker-compose.yml" ]; then
         echo ">> Reaplicando ajustes de produção..."
         sed -i '/oca_addons/d' docker-compose.yml
@@ -175,7 +182,7 @@ update_system() {
     echo ">> Baixando novas imagens Docker..."
     docker compose pull
 
-    # Garante a config correta do Nginx antes de subir
+    # 8. Regenera a configuração final baseada no novo template
     finalize_nginx_config
 
     echo ">> Reiniciando serviços..."
