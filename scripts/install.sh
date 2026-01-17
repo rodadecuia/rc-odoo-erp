@@ -136,9 +136,6 @@ git pull origin main || git pull origin master
 rm -f nginx/Dockerfile
 
 # Ajusta docker-compose.yml para remover o volume oca_addons
-# Como estamos usando a imagem pronta do GHCR que já contém os addons,
-# e não clonamos a pasta oca_addons localmente, precisamos remover esse mapeamento
-# para não sobrepor o conteúdo da imagem com uma pasta vazia.
 if [ -f "docker-compose.yml" ]; then
     echo "Ajustando docker-compose.yml para usar addons da imagem..."
     sed -i '/oca_addons/d' docker-compose.yml
@@ -205,9 +202,12 @@ EOF
         sleep 10
 
         echo "Solicitando certificado SSL via Certbot..."
-        docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot --email "$EMAIL" -d "$DOMAIN" --agree-tos --no-eff-email --force-renewal
+        # Adicionado --force-renewal para garantir que ele tente obter o certificado mesmo se achar que não precisa
+        # E removido --no-eff-email para evitar prompts interativos se algo der errado
+        docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot --email "$EMAIL" -d "$DOMAIN" --agree-tos --force-renewal
 
-        if [ -d "certbot/conf/live/$DOMAIN" ]; then
+        # Verifica se o arquivo do certificado realmente existe
+        if [ -f "certbot/conf/live/$DOMAIN/fullchain.pem" ]; then
             echo "Certificado obtido com sucesso!"
 
             # 2. Reescreve nginx.conf com SSL ativado e redirecionamento HTTP->HTTPS
@@ -260,6 +260,7 @@ EOF
         else
             echo "ERRO: Falha ao obter certificado. O Nginx permanecerá configurado apenas em HTTP."
             echo "Verifique se o domínio $DOMAIN está apontando corretamente para o IP deste servidor."
+            echo "Verifique os logs acima para mais detalhes sobre o erro do Certbot."
         fi
     else
         echo "Domínio ou email inválidos. Pulando configuração SSL."

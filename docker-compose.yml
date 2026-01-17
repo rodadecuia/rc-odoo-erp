@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   web:
     image: ghcr.io/rodadecuia/rc-odoo-erp:latest
@@ -13,6 +12,7 @@ services:
       - odoo-web-data:/var/lib/odoo
       - ./odoo_server/config:/etc/odoo
       - ./odoo_server/addons:/mnt/extra-addons
+      - ./odoo_server/oca_addons:/mnt/oca-addons
     environment:
       - HOST=db
       - USER=${POSTGRES_USER:-odoo}
