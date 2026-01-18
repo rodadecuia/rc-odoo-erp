@@ -2,7 +2,7 @@ FROM odoo:18.0
 
 USER root
 
-# Instala dependências do sistema necessárias para o OCA Brasil
+# Instala dependências do sistema necessárias para o OCA Brasil e fontes para relatórios
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
@@ -15,6 +15,15 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     libffi-dev \
     git \
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
+    fonts-freefont-otf \
+    fonts-noto-core \
+    fonts-inconsolata \
+    fontconfig \
+    libxrender1 \
+    xfonts-75dpi \
+    xfonts-base \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia e instala dependências Python
