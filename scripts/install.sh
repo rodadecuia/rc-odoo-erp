@@ -66,6 +66,29 @@ install_docker() {
     fi
 }
 
+# Função para gerar e configurar a senha mestra
+setup_master_password() {
+    if [ -f ".env" ]; then
+        # Verifica se ODOO_MASTER_PASSWORD já existe e não é 'admin' (padrão do exemplo)
+        CURRENT_PASS=$(grep "^ODOO_MASTER_PASSWORD=" .env | cut -d '=' -f2)
+
+        if [ -z "$CURRENT_PASS" ] || [ "$CURRENT_PASS" == "admin" ]; then
+            echo ">> Gerando nova senha mestra segura..."
+            # Gera uma senha aleatória de 16 caracteres
+            NEW_PASS=$(openssl rand -base64 12)
+
+            if grep -q "^ODOO_MASTER_PASSWORD=" .env; then
+                # Substitui se já existir a linha
+                sed -i "s|^ODOO_MASTER_PASSWORD=.*|ODOO_MASTER_PASSWORD=$NEW_PASS|" .env
+            else
+                # Adiciona se não existir
+                echo "ODOO_MASTER_PASSWORD=$NEW_PASS" >> .env
+            fi
+            echo ">> Senha mestra configurada."
+        fi
+    fi
+}
+
 # Função inteligente para configurar o Nginx baseado no estado atual dos certificados
 finalize_nginx_config() {
     echo ">> Verificando configuração final do Nginx..."
@@ -77,10 +100,8 @@ finalize_nginx_config() {
         DETECTED_DOMAIN=$(ls -F certbot/conf/live/ | grep / | head -n 1 | tr -d /)
     fi
 
-    echo ">> Domínio detectado nos certificados: '$DETECTED_DOMAIN'"
-
     if [ -n "$DETECTED_DOMAIN" ] && [ -f "certbot/conf/live/$DETECTED_DOMAIN/fullchain.pem" ]; then
-        echo ">> Certificado SSL válido encontrado. Aplicando template HTTPS..."
+        echo ">> Certificado SSL detectado para $DETECTED_DOMAIN. Aplicando template HTTPS..."
 
         if [ -f "nginx/nginx.conf" ]; then
              git checkout nginx/nginx.conf 2>/dev/null || true
@@ -89,13 +110,13 @@ finalize_nginx_config() {
         # Substitui o placeholder pelo domínio real
         sed -i "s/__DOMAIN__/$DETECTED_DOMAIN/g" nginx/nginx.conf
 
-        # Verificação de segurança: Se a substituição falhou, reverte para HTTP
+        # Verificação de segurança
         if grep -q "__DOMAIN__" nginx/nginx.conf; then
             echo "ERRO: Falha na substituição do domínio no nginx.conf. Revertendo para HTTP."
             FORCE_HTTP=true
         fi
     else
-        echo ">> Nenhum certificado SSL válido encontrado (ou arquivo fullchain.pem ausente)."
+        echo ">> Nenhum certificado SSL válido encontrado."
         FORCE_HTTP=true
     fi
 
@@ -147,6 +168,33 @@ EOF
     fi
 }
 
+show_final_info() {
+    echo ""
+    echo "================================================================"
+    echo " INSTALAÇÃO CONCLUÍDA COM SUCESSO!"
+    echo "================================================================"
+    echo ""
+    echo ">> Status dos Serviços:"
+    docker compose ps
+    echo ""
+
+    if [ -f ".env" ]; then
+        MASTER_PASS=$(grep "^ODOO_MASTER_PASSWORD=" .env | cut -d '=' -f2)
+        echo ">> CREDENCIAIS IMPORTANTES (Salve agora!):"
+        echo "   Senha Mestra do Odoo: $MASTER_PASS"
+        echo "   (Usada para criar/gerenciar bancos de dados)"
+        echo ""
+    fi
+
+    echo ">> Acesse seu sistema em:"
+    if [ -n "$DETECTED_DOMAIN" ]; then
+        echo "   https://$DETECTED_DOMAIN"
+    else
+        echo "   http://SEU_IP_OU_DOMINIO"
+    fi
+    echo "================================================================"
+}
+
 update_system() {
     echo ""
     echo "================================================================"
@@ -189,6 +237,9 @@ update_system() {
         sed -i '/oca_addons/d' docker-compose.yml
     fi
 
+    # Garante senha mestra
+    setup_master_password
+
     echo ">> Baixando novas imagens Docker..."
     docker compose pull
 
@@ -200,9 +251,7 @@ update_system() {
     echo ">> Limpando imagens antigas..."
     docker image prune -f
 
-    echo ""
-    echo ">> Atualização concluída com sucesso!"
-    docker compose ps
+    show_final_info
     exit 0
 }
 
@@ -259,6 +308,9 @@ fi
 mkdir -p odoo_server/addons
 mkdir -p certbot/conf
 mkdir -p certbot/www
+
+# Gera senha mestra
+setup_master_password
 
 # Configuração SSL (Interativa ou via Argumentos)
 CONFIGURE_SSL="n"
@@ -322,5 +374,4 @@ docker compose up -d
 echo ">> Limpando imagens antigas..."
 docker image prune -f
 
-echo ">> Instalação Concluída!"
-docker compose ps
+show_final_info

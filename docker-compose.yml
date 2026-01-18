@@ -17,6 +17,9 @@ services:
       - HOST=db
       - USER=${POSTGRES_USER:-odoo}
       - PASSWORD=${POSTGRES_PASSWORD:-odoo}
+      # Define a senha mestra do Odoo via variável de ambiente
+      # Se não definida no .env, usa 'admin' como padrão (não recomendado para produção)
+      - ODOO_ADMIN_PASSWD=${ODOO_MASTER_PASSWORD:-admin}
     restart: always
 
   db:
