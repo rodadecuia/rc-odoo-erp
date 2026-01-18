@@ -34,11 +34,17 @@ RUN pip3 install --no-cache-dir --break-system-packages -r /etc/odoo/requirement
 COPY ./config /etc/odoo
 
 # Copia os addons personalizados e OCA
-# Nota: A pasta oca_addons deve ser populada antes do build
 COPY ./addons /mnt/extra-addons
 COPY ./oca_addons /mnt/oca-addons
+
+# Configura o entrypoint personalizado
+COPY ./entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Ajusta permissões para o usuário odoo
 RUN chown -R odoo /etc/odoo /mnt/extra-addons /mnt/oca-addons
 
 USER odoo
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["odoo"]
