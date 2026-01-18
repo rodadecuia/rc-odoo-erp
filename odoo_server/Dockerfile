@@ -42,7 +42,9 @@ COPY ./entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Ajusta permissões para o usuário odoo
-RUN chown -R odoo /etc/odoo /mnt/extra-addons /mnt/oca-addons
+# Garante que /mnt/extra-addons exista e seja do odoo
+RUN mkdir -p /mnt/extra-addons \
+    && chown -R odoo:odoo /etc/odoo /mnt/extra-addons /mnt/oca-addons
 
 USER odoo
 

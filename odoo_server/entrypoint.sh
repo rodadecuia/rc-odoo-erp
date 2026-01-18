@@ -3,11 +3,13 @@ set -e
 
 # Função para gerar o addons_path dinamicamente
 generate_addons_path() {
-    # Caminho padrão dos addons do Odoo (pode variar dependendo da distro base, mas geralmente é este no Debian)
+    # Caminho padrão dos addons do Odoo
     local addons_path="/usr/lib/python3/dist-packages/odoo/addons"
 
-    # Adiciona /mnt/extra-addons apenas se existir
-    if [ -d "/mnt/extra-addons" ]; then
+    # Verifica se /mnt/extra-addons existe e tem permissão de leitura
+    if [ -d "/mnt/extra-addons" ] && [ -r "/mnt/extra-addons" ]; then
+        # Opcional: Verificar se não está vazio para evitar warnings, mas o Odoo deve aceitar vazio.
+        # O erro "not a valid addons directory" geralmente é permissão ou path inexistente.
         addons_path="$addons_path,/mnt/extra-addons"
     fi
 
